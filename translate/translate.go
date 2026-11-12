@@ -38,27 +38,42 @@ func needs(it feeds.Item, lang string) bool {
 	return it.Lang != lang && it.Category != "releases"
 }
 
-// Translate fills Translated from cache, sends only new titles out.
-// Chain: LLM -> Google -> original.
+// Translate fills Translated for items not in lang.
 func (t *Translator) Translate(ctx context.Context, items []feeds.Item, lang string) []feeds.Item {
 	out := make([]feeds.Item, len(items))
 	copy(out, items)
-	if t.Mode == "none" {
-		for i := range out {
-			out[i].Translated = ""
+	var titles []string
+	var idx []int
+	for i := range out {
+		out[i].Translated = ""
+		if needs(out[i], lang) {
+			titles = append(titles, out[i].Title)
+			idx = append(idx, i)
 		}
-		return out
+	}
+	for j, tr := range t.Texts(ctx, titles, lang) {
+		out[idx[j]].Translated = tr
+	}
+	return out
+}
+
+// Texts translates headlines or paragraphs; "" where it failed.
+// Cache first, only new texts go out. Chain: LLM -> Google -> original.
+func (t *Translator) Texts(ctx context.Context, texts []string, lang string) []string {
+	res := make([]string, len(texts))
+	if t.Mode == "none" {
+		return res
 	}
 
 	var todo []string
 	seen := map[string]bool{}
-	for _, it := range out {
-		if !needs(it, lang) || seen[it.Title] {
+	for _, s := range texts {
+		if seen[s] {
 			continue
 		}
-		seen[it.Title] = true
-		if _, ok := t.Cache.Get(lang, it.Title); !ok {
-			todo = append(todo, it.Title)
+		seen[s] = true
+		if _, ok := t.Cache.Get(lang, s); !ok {
+			todo = append(todo, s)
 		}
 	}
 
@@ -68,9 +83,9 @@ func (t *Translator) Translate(ctx context.Context, items []feeds.Item, lang str
 		for i := 0; i < len(todo); i += batchSize {
 			batch := todo[i:min(i+batchSize, len(todo))]
 			if useLLM {
-				if res, err := t.llmBatch(ctx, batch, lang); err == nil {
+				if tr, err := t.llmBatch(ctx, batch, lang); err == nil {
 					for j, s := range batch {
-						t.Cache.Put(lang, s, res[j])
+						t.Cache.Put(lang, s, tr[j])
 					}
 					continue
 				}
@@ -86,18 +101,15 @@ func (t *Translator) Translate(ctx context.Context, items []feeds.Item, lang str
 		_ = t.Cache.Save()
 	}
 
-	for i := range out {
-		out[i].Translated = ""
-		if needs(out[i], lang) {
-			out[i].Translated, _ = t.Cache.Get(lang, out[i].Title)
-		}
+	for i, s := range texts {
+		res[i], _ = t.Cache.Get(lang, s)
 	}
-	return out
+	return res
 }
 
 func (t *Translator) llmBatch(ctx context.Context, batch []string, lang string) ([]string, error) {
 	in, _ := json.Marshal(batch)
-	system := fmt.Sprintf("You translate tech and security news headlines into %s. "+
+	system := fmt.Sprintf("You translate tech and security news headlines and article paragraphs into %s. "+
 		"Keep CVE IDs, product names, versions and code unchanged. "+
 		"Reply with ONLY a JSON array of %d strings, same order, nothing else.",
 		i18n.T(lang, "lang.prompt_name"), len(batch))

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OutTuna/techwatch/article"
 	"github.com/OutTuna/techwatch/config"
 	"github.com/OutTuna/techwatch/digest"
 	"github.com/OutTuna/techwatch/feeds"
@@ -327,5 +328,64 @@ func TestDigestNoNews(t *testing.T) {
 	mm, _ = m.Update(digestMsg{err: digest.ErrNoNews, lang: "uk", provider: "ollama"})
 	if !strings.Contains(mm.View(), "Поки немає новин для дайджесту") {
 		t.Fatal("no-news text missing")
+	}
+}
+
+func TestArticlePanel(t *testing.T) {
+	m := testModel(t)
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = press(mm, "2").(Model) // security tab, first row is https://a/1
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = mm.(Model)
+	if m.art == nil || !m.art.loading || cmd == nil || m.art.item.URL != "https://a/1" {
+		t.Fatal("o must open panel and start loading")
+	}
+	if m.art.vp.Width != 66 || m.vp.Width != 53 {
+		t.Fatal("side layout", m.vp.Width, m.art.vp.Width)
+	}
+
+	// stale page for another url is ignored
+	mm, _ = m.Update(articleMsg{url: "https://other", paras: []article.Para{{Text: "wrong"}}})
+	if strings.Contains(mm.View(), "wrong") {
+		t.Fatal("stale article shown")
+	}
+	mm, cmd = m.Update(articleMsg{url: "https://a/1", paras: []article.Para{{Text: "Що сталося", Head: true}, {Text: "Attackers used the bug.\x1b[2J"}}})
+	m = mm.(Model)
+	if !m.art.translating || cmd == nil {
+		t.Fatal("english article must be translated")
+	}
+	v := m.View()
+	if !strings.Contains(v, "Attackers used the bug.") || strings.Contains(v, "\x1b[2J") || !strings.Contains(v, "│") {
+		t.Fatal("original text, cleaning or separator missing:\n" + v)
+	}
+	mm, _ = m.Update(articleTransMsg{url: "https://a/1", lang: "uk", texts: []string{"", "Нападники використали баг."}})
+	v = mm.View()
+	if !strings.Contains(v, "Нападники використали баг.") || !strings.Contains(v, "Що сталося") {
+		t.Fatal("translation not swapped in:\n" + v)
+	}
+
+	m = press(mm, "j", "esc").(Model)
+	if m.art != nil || m.vp.Width != 120 {
+		t.Fatal("esc must close panel and restore width")
+	}
+}
+
+func TestArticleFallbackAndNarrow(t *testing.T) {
+	m := testModel(t)
+	m.items[0].Summary = "<p>Feed summary that is long enough to be shown here.</p>"
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	m = press(mm, "2", "o").(Model)
+	if m.art.vp.Width != 80 {
+		t.Fatal("narrow terminal must show article full width")
+	}
+	mm, _ = m.Update(articleMsg{url: "https://a/1", err: errors.New("HTTP 403")})
+	m = mm.(Model)
+	if !m.art.fromFeed || !strings.Contains(m.View(), "Feed summary that is long enough") {
+		t.Fatal("feed summary fallback missing")
+	}
+	// releases have no link
+	m = press(m, "esc", "4", "o").(Model)
+	if m.art != nil || m.status != "У цього запису немає посилання" {
+		t.Fatal(m.status)
 	}
 }

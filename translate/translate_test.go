@@ -227,3 +227,15 @@ func TestLiveGoogle(t *testing.T) {
 		t.Fatal(res)
 	}
 }
+
+func TestTexts(t *testing.T) {
+	tr, _, g := newT(t, "google", nil)
+	res := tr.Texts(context.Background(), []string{"p1", "p2", "p1"}, "uk")
+	if *g != 2 || res[0] != "G:p1" || res[2] != "G:p1" {
+		t.Fatal(*g, res)
+	}
+	tr.google = func(context.Context, []string, string) map[string]string { return nil }
+	if res := tr.Texts(context.Background(), []string{"new"}, "uk"); res[0] != "" {
+		t.Fatal("failed text must stay empty")
+	}
+}

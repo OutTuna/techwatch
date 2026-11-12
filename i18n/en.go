@@ -42,7 +42,7 @@ func init() {
 		"weather.wind":     "Wind",
 		"weather.forecast": "Forecast",
 
-		"help.keys": "j/k move · g/G top/bottom · d/u page · enter open · r refresh · f filter · L lang · P provider · q quit",
+		"help.keys": "j/k move · g/G top/bottom · d/u page · enter open · o article · r refresh · f filter · L lang · P provider · q quit",
 
 		"setup.title":         "techwatch setup",
 		"setup.lang":          "Choose language",
@@ -88,5 +88,9 @@ func init() {
 		"setup.city_not_found": "City not found, check the spelling",
 		"status.bad_url":       "This item has no link",
 		"digest.no_news":       "No news for a digest yet",
+		"article.loading":      "Loading article…",
+		"article.from_feed":    "The site did not give the text, showing the feed summary",
+		"article.empty":        "No text found. Press enter to open in browser",
+		"article.keys":         "j/k scroll · d/u page · g/G top/bottom · enter browser · esc/o close · L lang · q quit",
 	})
 }

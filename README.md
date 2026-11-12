@@ -50,6 +50,7 @@ Any OpenAI-compatible API works: add it to `providers` with `type: openai` and i
 | `g` / `G` | top / bottom |
 | `d` / `u` | page down / up |
 | `enter` | open in browser |
+| `o` | read the article in a side panel, translated (`j/k` scroll, `esc` close) |
 | `r` | refresh |
 | `f` | filter: category on Tech, source on other tabs |
 | `L` | switch language (saved) |

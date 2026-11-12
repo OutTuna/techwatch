@@ -20,6 +20,7 @@ import (
 type Item struct {
 	Title      string
 	Translated string
+	Summary    string // feed description/content, html; article fallback
 	Source     string
 	URL        string
 	Category   string
@@ -126,6 +127,10 @@ func parseFeed(body []byte, src config.Feed, now time.Time) ([]Item, error) {
 		it := Item{
 			Title: title, Source: src.Name, URL: e.Link, Category: src.Category, Lang: src.Lang,
 			Published: pub, Level: Classify(title), CVEs: ExtractCVEs(title, e.Description),
+			Summary: e.Description,
+		}
+		if len(e.Content) > len(e.Description) {
+			it.Summary = e.Content
 		}
 		if src.Category == "releases" {
 			it.Title = src.Name + " " + title

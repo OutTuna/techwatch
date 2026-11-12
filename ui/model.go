@@ -89,6 +89,7 @@ type Model struct {
 	wNow    *weather.Now
 	wDays   []weather.Day
 	wErr    error
+	art     *articleView
 
 	sel    [tabCount]int
 	filter [tabCount]string
@@ -164,13 +165,19 @@ func (m *Model) digestCmd() tea.Cmd {
 	})
 }
 
-func (m *Model) translate() tea.Cmd {
-	m.trans = true
-	tr := *m.tr // copy: provider may change while this runs
+// translator returns a copy: provider may change while a job runs.
+func (m Model) translator() translate.Translator {
+	tr := *m.tr
 	if p := m.cfg.Active(); p != nil {
 		pc := *p
 		tr.Provider = &pc
 	}
+	return tr
+}
+
+func (m *Model) translate() tea.Cmd {
+	m.trans = true
+	tr := m.translator()
 	gen, lang, items := m.gen, m.cfg.Language, slices.Clone(m.items)
 	return tea.Batch(m.spin.Tick, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -184,7 +191,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
-		m.vp.Width, m.vp.Height = msg.Width, max(1, msg.Height-4)
+		m.layout()
+
+	case articleMsg:
+		cmd = m.gotArticle(msg)
+
+	case articleTransMsg:
+		m.gotArticleTrans(msg)
 
 	case fetchedMsg:
 		if msg.gen != m.gen {
@@ -221,7 +234,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(m.fetch(), m.fetchWeather(), tick(m.cfg.RefreshSec))
 
 	case spinner.TickMsg:
-		if !m.fetching && !m.trans && !m.digBusy {
+		if !m.busy() {
 			return m, nil // idle: stop ticking, a new job restarts it
 		}
 		m.spin, cmd = m.spin.Update(msg)
@@ -234,9 +247,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) key(k string) tea.Cmd {
+	if m.art != nil {
+		if cmd, ok := m.articleKey(k); ok {
+			return cmd
+		}
+	}
 	n := len(m.rows)
 	s := &m.sel[m.tab]
 	switch k {
+	case "o":
+		return m.openArticle()
 	case "q", "ctrl+c":
 		return tea.Quit
 	case "tab", "right", "l":
@@ -282,7 +302,7 @@ func (m *Model) key(k string) tea.Cmd {
 			m.items[i].Translated = ""
 		}
 		m.status = m.t("status.lang") + ": " + m.t("lang.name") + m.save()
-		return tea.Batch(m.translate(), m.digestCmd())
+		return tea.Batch(m.translate(), m.digestCmd(), m.translateArticle())
 	case "P":
 		m.cfg.NextProvider()
 		m.status = m.t("status.provider") + ": " + m.modeName() + m.save()
@@ -417,6 +437,9 @@ func (m *Model) render() {
 		m.render()
 		return
 	}
+	if m.art != nil {
+		m.renderArticle()
+	}
 	m.vp.SetContent(strings.Join(b, "\n"))
 	if s := m.sel[m.tab]; s < len(m.rowAt) {
 		top, bottom := m.rowAt[s], len(b)-1
@@ -452,7 +475,7 @@ func clean(s string, keepNL bool) string {
 }
 
 func (m Model) itemLines(it feeds.Item, selected bool) []string {
-	w := max(20, m.w)
+	w := max(20, m.vp.Width)
 	cursor, title := "  ", clean(it.Title, false)
 	if it.Translated != "" {
 		title = clean(it.Translated, false)
@@ -487,11 +510,11 @@ func (m Model) digestLines() []string {
 		} else if errors.Is(m.digErr, digest.ErrNoNews) {
 			msg = m.t("digest.no_news")
 		}
-		return []string{ansi.Truncate("  "+styleErr.Render(msg), m.w, "…")}
+		return []string{ansi.Truncate("  "+styleErr.Render(msg), m.vp.Width, "…")}
 	case m.dig == nil:
 		return []string{styleDim.Render("  " + m.t("digest.pending"))}
 	}
-	text := lipgloss.NewStyle().Width(max(20, m.w-4)).Render(clean(m.dig.Text, true))
+	text := lipgloss.NewStyle().Width(max(20, m.vp.Width-4)).Render(clean(m.dig.Text, true))
 	var out []string
 	for _, l := range strings.Split(text, "\n") {
 		out = append(out, "  "+l)
@@ -583,6 +606,10 @@ func (m Model) View() string {
 		tabs = append(tabs, st.Render(fmt.Sprintf("%d %s", i+1, m.t(k))))
 	}
 
+	help := m.t("help.keys")
+	if m.art != nil {
+		help = m.t("article.keys")
+	}
 	status := clean(m.status, false)
 	if strings.Contains(status, m.t("status.error")) || strings.Contains(status, m.t("status.unavailable")) {
 		status = styleErr.Render(status)
@@ -590,9 +617,9 @@ func (m Model) View() string {
 	return strings.Join([]string{
 		ansi.Truncate(head, m.w, "…"),
 		ansi.Truncate(strings.Join(tabs, ""), m.w, "…"),
-		m.vp.View(),
+		m.body(),
 		ansi.Truncate(status, m.w, "…"),
-		ansi.Truncate(styleDim.Render(m.t("help.keys")), m.w, "…"),
+		ansi.Truncate(styleDim.Render(help), m.w, "…"),
 	}, "\n")
 }
 
