@@ -100,7 +100,7 @@ extra_feeds:
     category: security          # security | vulns | releases | tech | local
     lang: en                    # feeds in your language are not translated
 disabled_categories: []         # e.g. [local, tech]
-location:
+location:                       # change with "techwatch setup": it looks up the coordinates
   city: Kyiv
   country: UA
   latitude: 50.4501

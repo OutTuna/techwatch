@@ -3,6 +3,7 @@ package digest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,8 @@ type Digest struct {
 
 var chat = llm.Chat
 
+var ErrNoNews = errors.New("no news yet")
+
 func Generate(ctx context.Context, p config.Provider, lang string, items []feeds.Item) (*Digest, error) {
 	var b strings.Builder
 	n := 0
@@ -41,7 +44,7 @@ func Generate(ctx context.Context, p config.Provider, lang string, items []feeds
 		b.WriteString("\n")
 	}
 	if n == 0 {
-		return nil, fmt.Errorf("no news yet")
+		return nil, ErrNoNews
 	}
 	system := fmt.Sprintf(`You are a cybersecurity analyst writing a short daily brief for engineers.
 Use only the headlines given. Write in %s. Plain text, no markdown, at most 14 lines:

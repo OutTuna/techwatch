@@ -3,6 +3,7 @@ package weather
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -84,6 +85,8 @@ func Fetch(ctx context.Context, lat, lon float64, unit string) (*Now, []Day, err
 	return now, days, nil
 }
 
+var ErrNotFound = errors.New("city not found")
+
 type Place struct {
 	Name, Country string
 	Lat, Lon      float64
@@ -103,7 +106,7 @@ func Geocode(ctx context.Context, city, lang string) (*Place, error) {
 		return nil, err
 	}
 	if len(raw.Results) == 0 {
-		return nil, fmt.Errorf("city not found: %s", city)
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, city)
 	}
 	r := raw.Results[0]
 	return &Place{r.Name, r.Country, r.Lat, r.Lon}, nil

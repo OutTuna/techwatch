@@ -261,6 +261,8 @@ func (m *Model) key(k string) tea.Cmd {
 		if *s >= 0 && *s < n {
 			if err := openURL(m.rows[*s].URL); err == nil {
 				m.status = m.t("status.opened")
+			} else if errors.Is(err, errBadURL) {
+				m.status = m.t("status.bad_url")
 			} else {
 				m.status = m.t("status.error") + ": " + err.Error()
 			}
@@ -482,6 +484,8 @@ func (m Model) digestLines() []string {
 		msg := m.t("digest.error") + ": " + clean(m.digErr.Error(), false)
 		if errors.Is(m.digErr, llm.ErrRateLimit) {
 			msg = m.t("digest.rate_limit")
+		} else if errors.Is(m.digErr, digest.ErrNoNews) {
+			msg = m.t("digest.no_news")
 		}
 		return []string{ansi.Truncate("  "+styleErr.Render(msg), m.w, "…")}
 	case m.dig == nil:
@@ -592,10 +596,12 @@ func (m Model) View() string {
 	}, "\n")
 }
 
+var errBadURL = errors.New("bad url")
+
 // openURL accepts only http(s): links come from remote feeds.
 func openURL(u string) error {
 	if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
-		return fmt.Errorf("bad url")
+		return errBadURL
 	}
 	var c *exec.Cmd
 	switch runtime.GOOS {

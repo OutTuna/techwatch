@@ -85,5 +85,8 @@ func init() {
 		"digest.error":         "Digest failed",
 		"digest.rate_limit":    "LLM rate limit (429). Try later or press P to switch provider",
 		"setup.city_searching": "Looking up city…",
+		"setup.city_not_found": "City not found, check the spelling",
+		"status.bad_url":       "This item has no link",
+		"digest.no_news":       "No news for a digest yet",
 	})
 }

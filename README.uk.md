@@ -85,6 +85,8 @@ extra_feeds:
 disabled_categories: []     # напр. [local, tech]
 ```
 
+Місто змінюйте через `techwatch setup`: координати для погоди шукаються автоматично.
+
 Інші файли в тій самій теці: `translations.json` (кеш перекладів), `digest.json` (останній дайджест).
 
 ## Нова мова

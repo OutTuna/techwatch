@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -90,6 +91,10 @@ func (s Setup) Init() tea.Cmd { return textinput.Blink }
 func (s Setup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if g, ok := msg.(geoMsg); ok {
 		s.busy = false
+		if errors.Is(g.err, weather.ErrNotFound) {
+			s.err = s.t("setup.city_not_found")
+			return s, nil
+		}
 		if g.err != nil {
 			s.err = g.err.Error()
 			return s, nil
@@ -188,6 +193,9 @@ func (s Setup) confirm() (tea.Model, tea.Cmd) {
 }
 
 func (s Setup) finish() (tea.Model, tea.Cmd) {
+	if p := s.cfg.Active(); p != nil && !p.Usable() {
+		s.cfg.ActiveProvider = "" // picked without a key: start in FREE
+	}
 	if err := config.Save(s.cfg); err != nil {
 		s.err = err.Error()
 		return s, nil

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -195,8 +196,8 @@ func TestSetupGeocodeResult(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	s := NewSetup(config.Default())
 	s.step = stepCity
-	m, _ := s.Update(geoMsg{err: errors.New("city not found: X")})
-	if m.(Setup).err == "" || m.(Setup).Done {
+	m, _ := s.Update(geoMsg{err: fmt.Errorf("%w: X", weather.ErrNotFound)})
+	if m.(Setup).err != "Місто не знайдено, перевірте написання" || m.(Setup).Done {
 		t.Fatal("error must keep setup open")
 	}
 	m, _ = m.Update(geoMsg{place: &weather.Place{Name: "Львів", Country: "UA", Lat: 49.8, Lon: 24}})
@@ -298,5 +299,33 @@ func TestOverviewIgnoresReleasesFilter(t *testing.T) {
 	}
 	if rel != 2 {
 		t.Fatal("overview releases filtered:", rel)
+	}
+}
+
+func TestSetupWithoutKeyStartsFree(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GROQ_API_KEY", "")
+	cfg := config.Default()
+	var m tea.Model = NewSetup(cfg)
+	// uk ; groq ; empty key ; releases ; custom ; city unchanged
+	m = press(m, "enter", "j", "enter", "enter", "enter", "enter", "enter")
+	if !m.(Setup).Done || cfg.ActiveProvider != "" {
+		t.Fatal("provider without key must not stay active:", cfg.ActiveProvider)
+	}
+}
+
+func TestBadURLStatus(t *testing.T) {
+	m := press(testModel(t), "4", "enter").(Model) // release rows have no URL
+	if m.status != "У цього запису немає посилання" {
+		t.Fatal(m.status)
+	}
+}
+
+func TestDigestNoNews(t *testing.T) {
+	mm, _ := testModel(t).Update(tea.WindowSizeMsg{Width: 100, Height: 60})
+	m := press(mm, "P").(Model)
+	mm, _ = m.Update(digestMsg{err: digest.ErrNoNews, lang: "uk", provider: "ollama"})
+	if !strings.Contains(mm.View(), "Поки немає новин для дайджесту") {
+		t.Fatal("no-news text missing")
 	}
 }
